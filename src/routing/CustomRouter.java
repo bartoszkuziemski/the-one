@@ -15,10 +15,11 @@ public class CustomRouter extends ActiveRouter {
 
     private List<Rreq> rreqList;
     private List<Rrep> rrepList;
-    private List<RoutingTableEntry> routingTable = new ArrayList<>();
+    private final List<RoutingTableEntry> routingTable = new ArrayList<>();
 
     public CustomRouter(ActiveRouter r) {
         super(r);
+        r.deleteDelivered = true;
     }
 
     public CustomRouter(Settings s) {
@@ -36,9 +37,6 @@ public class CustomRouter extends ActiveRouter {
         if (exchangeDeliverableMessages() != null) {
             return; // started a transfer, don't try others (yet)
         }
-
-        // then try any/all message to any/all connection
-        // this.tryAllMessagesToAllConnections();
 
         List<Message> messages = new ArrayList<>(getMessageCollection());
         for (Message m : messages) {
@@ -65,17 +63,20 @@ public class CustomRouter extends ActiveRouter {
                 .stream()
                 .filter(entry -> entry.getDestinationId().equals(destinationId))
                 .collect(Collectors.toList());
-        RoutingTableEntry routingTableEntry = routingTableEntries
-                .stream()
-                .min(Comparator.comparing(RoutingTableEntry::getHopCount))
-                .orElse(routingTableEntries.get(0));
-        DTNHost sendTo = routingTableEntry.getNextHop();
+        RoutingTableEntry bestNode = findBestNode(routingTableEntries);
+        DTNHost sendTo = bestNode.getNextHop();
         List<Connection> connections = getConnections();
-        Optional<Connection> con = connections
+        return connections
                 .stream()
                 .filter(connection -> connection.getOtherNode(getHost()).equals(sendTo))
                 .findFirst();
-        return con;
+    }
+
+    private RoutingTableEntry findBestNode(List<RoutingTableEntry> routingTableEntries) {
+       return routingTableEntries
+                .stream()
+                .min(Comparator.comparing(RoutingTableEntry::getHopCount))
+                .orElse(routingTableEntries.get(0));
     }
 
     @Override
@@ -114,10 +115,10 @@ public class CustomRouter extends ActiveRouter {
 
     @Override
     public int receiveMessage(Message m, DTNHost from) {
-        int recvCheck = checkReceiving(m, from);
-        if (recvCheck != RCV_OK) {
-            return recvCheck;
-        }
+//        int recvCheck = checkReceiving(m, from);
+//        if (recvCheck != RCV_OK) {
+//            return recvCheck;
+//        }
 
         saveToRoutingTable(m, from);
 
