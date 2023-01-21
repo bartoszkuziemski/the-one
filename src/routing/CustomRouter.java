@@ -9,12 +9,13 @@ import routing.bsk.Rrep;
 import routing.bsk.Rreq;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class CustomRouter extends ActiveRouter {
 
     private List<Rreq> rreqList;
     private List<Rrep> rrepList;
-    private Map<String, RoutingTableEntry> routingTable = new HashMap<>();
+    private List<RoutingTableEntry> routingTable = new ArrayList<>();
 
     public CustomRouter(ActiveRouter r) {
         super(r);
@@ -32,29 +33,42 @@ public class CustomRouter extends ActiveRouter {
         }
 
         // Try first the messages that can be delivered to final recipient
+        if (exchangeDeliverableMessages() != null) {
+            return; // started a transfer, don't try others (yet)
+        }
 
         // then try any/all message to any/all connection
         // this.tryAllMessagesToAllConnections();
 
         List<Message> messages = new ArrayList<>(getMessageCollection());
         for (Message m : messages) {
-            String destinationId = m.getTo().toString();
-            if (routingTable.containsKey(destinationId)) {
-                Optional<Connection> connection = findConnectionFromRoutingTable(destinationId);
-                connection.ifPresent(con -> startTransfer(m, con));
-            }
-            else {
-                broadcast(m);
+            DTNHost destinationId = m.getTo();
+            if (routingTable.stream().anyMatch(routingTableEntry -> routingTableEntry.getDestinationId().equals(destinationId))) {
+                this.sendMessage(destinationId, m);
+            } else {
+                this.broadcast(m);
             }
         }
+    }
+
+    private void sendMessage(DTNHost destinationId, Message message) {
+        Optional<Connection> connection = findConnectionFromRoutingTable(destinationId);
+        connection.ifPresent(con -> startTransfer(message, con));
     }
 
     private void broadcast(Message message) {
         getConnections().forEach(connection -> startTransfer(message, connection));
     }
 
-    private Optional<Connection> findConnectionFromRoutingTable(String destinationId) {
-        RoutingTableEntry routingTableEntry = routingTable.get(destinationId);
+    private Optional<Connection> findConnectionFromRoutingTable(DTNHost destinationId) {
+        List<RoutingTableEntry> routingTableEntries = routingTable
+                .stream()
+                .filter(entry -> entry.getDestinationId().equals(destinationId))
+                .collect(Collectors.toList());
+        RoutingTableEntry routingTableEntry = routingTableEntries
+                .stream()
+                .min(Comparator.comparing(RoutingTableEntry::getHopCount))
+                .orElse(routingTableEntries.get(0));
         DTNHost sendTo = routingTableEntry.getNextHop();
         List<Connection> connections = getConnections();
         Optional<Connection> con = connections
@@ -62,6 +76,19 @@ public class CustomRouter extends ActiveRouter {
                 .filter(connection -> connection.getOtherNode(getHost()).equals(sendTo))
                 .findFirst();
         return con;
+    }
+
+    @Override
+    public void changedConnection(Connection con) {
+        if (con.isUp()) {
+            return;
+        }
+        DTNHost nodeToRemove = con.getOtherNode(getHost());
+        List<RoutingTableEntry> entriesToRemove = routingTable
+                .stream()
+                .filter(entry -> entry.getNextHop().equals(nodeToRemove))
+                .collect(Collectors.toList());
+        routingTable.removeAll(entriesToRemove);
     }
 
     @Override
@@ -99,12 +126,21 @@ public class CustomRouter extends ActiveRouter {
     }
 
     private void saveToRoutingTable(Message message, DTNHost from) {
-        String key = message.getFrom().toString();
+        if (containsEntry(message, from)) {
+            return;
+        }
         RoutingTableEntry routingTableEntry = new RoutingTableEntry();
         routingTableEntry.setDestinationId(message.getFrom());
         routingTableEntry.setNextHop(from);
         routingTableEntry.setHopCount(message.getHops().size());
-        routingTable.put(key, routingTableEntry);
+        routingTable.add(routingTableEntry);
+    }
+
+    private boolean containsEntry(Message message, DTNHost from) {
+        DTNHost destinationId = message.getFrom();
+        return routingTable
+                .stream()
+                .anyMatch(entry -> entry.getDestinationId().equals(destinationId) && entry.getNextHop().equals(from));
     }
 
 }
