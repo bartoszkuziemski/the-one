@@ -5,16 +5,15 @@ import core.DTNHost;
 import core.Message;
 import core.Settings;
 import routing.bsk.RoutingTableEntry;
-import routing.bsk.Rrep;
-import routing.bsk.Rreq;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class CustomRouter extends ActiveRouter {
 
-    private List<Rreq> rreqList;
-    private List<Rrep> rrepList;
     private final List<RoutingTableEntry> routingTable = new ArrayList<>();
 
     public CustomRouter(ActiveRouter r) {
@@ -73,7 +72,7 @@ public class CustomRouter extends ActiveRouter {
     }
 
     private RoutingTableEntry findBestNode(List<RoutingTableEntry> routingTableEntries) {
-       return routingTableEntries
+        return routingTableEntries
                 .stream()
                 .min(Comparator.comparing(RoutingTableEntry::getHopCount))
                 .orElse(routingTableEntries.get(0));
@@ -97,32 +96,9 @@ public class CustomRouter extends ActiveRouter {
         return new CustomRouter(this);
     }
 
-    public boolean isInTable(Rreq rreq) {
-        return rreqList.contains(rreq);
-    }
-
-    public boolean isInTable(Rrep rrep) {
-        return rrepList.contains(rrep);
-    }
-
-    public void sendRreq(Connection connection, Rreq rreq) {
-
-    }
-
-    public void sendRrep(Connection connection, Rrep rrep) {
-
-    }
-
     @Override
     public int receiveMessage(Message m, DTNHost from) {
-//        int recvCheck = checkReceiving(m, from);
-//        if (recvCheck != RCV_OK) {
-//            return recvCheck;
-//        }
-
         saveToRoutingTable(m, from);
-
-        // seems OK, start receiving the message
         return super.receiveMessage(m, from);
     }
 
