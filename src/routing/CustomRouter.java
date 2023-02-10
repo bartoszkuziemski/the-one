@@ -7,7 +7,6 @@ import core.Settings;
 import routing.bsk.RoutingTableEntry;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -74,7 +73,15 @@ public class CustomRouter extends ActiveRouter {
     private RoutingTableEntry findBestNode(List<RoutingTableEntry> routingTableEntries) {
         return routingTableEntries
                 .stream()
-                .min(Comparator.comparing(RoutingTableEntry::getHopCount))
+                .min((o1, o2) -> {
+                    if (o1.getDistance() > o2.getDistance()) {
+                        return 1;
+                    } else if (o1.getDistance() < o2.getDistance()) {
+                        return -1;
+                    } else {
+                        return Integer.compare(o1.getHopCount(), o2.getHopCount());
+                    }
+                })
                 .orElse(routingTableEntries.get(0));
     }
 
@@ -110,6 +117,22 @@ public class CustomRouter extends ActiveRouter {
         routingTableEntry.setDestinationId(message.getFrom());
         routingTableEntry.setNextHop(from);
         routingTableEntry.setHopCount(message.getHops().size());
+
+        if (!message.getPreviousNodeCoords().equals(getHost().getLocation())) {
+            double previousNodeX = message.getPreviousNodeCoords().getX();
+            double previousNodeY = message.getPreviousNodeCoords().getY();
+            double thisNodeX = getHost().getLocation().getX();
+            double thisNodeY = getHost().getLocation().getY();
+            double diffX = Math.abs(thisNodeX - previousNodeX);
+            double diffY = Math.abs(thisNodeY - previousNodeY);
+            double meanDistance = Math.sqrt(Math.pow(diffX, 2) + Math.pow(diffY, 2));
+            double previousMeanDistance = message.getDistanceTravelled();
+            double newMeanDistance = previousMeanDistance + meanDistance;
+            routingTableEntry.setDistance(newMeanDistance);
+        }
+
+        message.setPreviousNodeCoords(getHost().getLocation());
+
         routingTable.add(routingTableEntry);
     }
 

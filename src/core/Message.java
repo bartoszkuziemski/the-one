@@ -49,6 +49,11 @@ public class Message implements Comparable<Message> {
 	/** Application ID of the application that created the message */
 	private String	appID;
 
+
+	private Coord previousNodeCoords;
+	private double distanceTravelled = 0.0;
+
+
 	static {
 		reset();
 		DTNSim.registerForReset(Message.class.getCanonicalName());
@@ -80,6 +85,22 @@ public class Message implements Comparable<Message> {
 
 		Message.nextUniqueId++;
 		addNodeOnPath(from);
+	}
+
+	public double getDistanceTravelled() {
+		return distanceTravelled;
+	}
+
+	public void setDistanceTravelled(double distanceTravelled) {
+		this.distanceTravelled = distanceTravelled;
+	}
+
+	public Coord getPreviousNodeCoords() {
+		return previousNodeCoords;
+	}
+
+	public void setPreviousNodeCoords(Coord previousNodeCoords) {
+		this.previousNodeCoords = previousNodeCoords;
 	}
 
 	/**
@@ -128,6 +149,7 @@ public class Message implements Comparable<Message> {
 	 * @param node The node to add
 	 */
 	public void addNodeOnPath(DTNHost node) {
+		this.previousNodeCoords = node.getLocation();
 		this.path.add(node);
 	}
 
