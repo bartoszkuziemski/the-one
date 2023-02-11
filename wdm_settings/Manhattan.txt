@@ -1,9 +1,9 @@
 
 Scenario.name = default_scenario
 Scenario.simulateConnections = true
-Scenario.updateInterval = 1
+Scenario.updateInterval = 5
 # 43k ~= 12h
-Scenario.endTime = 50k
+Scenario.endTime = 100k
 
 Report.warmup = 5k
 Group.msgTtl = 1433

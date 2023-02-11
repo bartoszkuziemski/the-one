@@ -32,7 +32,7 @@ public class CustomRouter extends ActiveRouter {
         r.deleteDelivered = true;
         this.routeRequestId = 0;
         this.routeReplyId = 0;
-        this.RREQMemory = new HashMap<String, Double>();
+        this.RREQMemory = new HashMap<>();
     }
 
     public CustomRouter(Settings s) {
@@ -40,7 +40,7 @@ public class CustomRouter extends ActiveRouter {
         deleteDelivered = true;
         this.routeRequestId = 0;
         this.routeReplyId = 0;
-        this.RREQMemory = new HashMap<String, Double>();
+        this.RREQMemory = new HashMap<>();
     }
 
     private int getRouteRequestId() {
@@ -48,6 +48,7 @@ public class CustomRouter extends ActiveRouter {
         this.routeRequestId += 1;
         return id;
     }
+
     private int getRouteReplyId() {
         int id = this.routeReplyId;
         this.routeReplyId += 1;
@@ -96,21 +97,25 @@ public class CustomRouter extends ActiveRouter {
             }
         }
     }
-    public void addMessageIdToDelete (String id) {
+
+    public void addMessageIdToDelete(String id) {
         if (this.getMessageCollection().stream().toList().contains(this.getMessage(id))) {
             this.messagesToDelete.add(id);
         }
     }
+
     private void clearMessagesToDelete() {
         this.messagesToDelete.forEach(id -> deleteMessage(id, false));
         this.messagesToDelete.clear();
     }
+
     @Override
     public Message messageTransferred(String id, DTNHost from) {
-        CustomRouter fromRouter = (CustomRouter)from.getRouter();
+        CustomRouter fromRouter = (CustomRouter) from.getRouter();
         fromRouter.addMessageIdToDelete(id);
         return super.messageTransferred(id, from);
     }
+
     private boolean skipMessage(Message m) {
         // The message author is the host of this router and the message came back there
         if (m.getHopCount() > 0 && m.getFrom().equals(this.getHost())) {
@@ -128,19 +133,17 @@ public class CustomRouter extends ActiveRouter {
         DTNHost from = this.getHost();
         Message routeReq = this.buildRouteRequest(from, destination);
         this.addToMessages(routeReq, false);
-        //this.addToMessages(routeReq,true);
         this.broadcast(routeReq);
     }
 
     /**
      * This is to avoid generating new RREQs every each update call
      * (introduces a delay between new RREQs)
-     *  Checks how long ago was the last time of
-     *  the RREQ to the selected destination send
-     *  returns true if it was 'enough' long time ago
+     * Checks how long ago was the last time of
+     * the RREQ to the selected destination send
+     * returns true if it was 'enough' long time ago
      */
     private boolean canRetryRREQ(String destination) {
-
         Double curTime = Double.valueOf(getTime());
         Double mapVal = RREQMemory.get(destination);
         if (mapVal != null) {
@@ -160,8 +163,7 @@ public class CustomRouter extends ActiveRouter {
     Message buildRouteRequest(DTNHost from, DTNHost to) {
         int requestId = this.getRouteRequestId();
         String idStr = "RREQ_" + from.toString() + "_to_" + to.toString() + "_" + requestId;
-        Message rreq = new Message(from, to, idStr, RREQ_SIZE, RREQ, requestId);
-        return rreq;
+        return new Message(from, to, idStr, RREQ_SIZE, RREQ, requestId);
     }
 
     Message buildRouteReply(DTNHost from, DTNHost to) {
@@ -170,8 +172,7 @@ public class CustomRouter extends ActiveRouter {
         if (!from.equals(this.getHost())) {
             idStr += "_gen_by_" + this.getHost(); //when the author of the RREP is not the node at the end of the route...
         }
-        Message rrep = new Message(from, to, idStr, RREP_SIZE, RREP, requestId);
-        return rrep;
+        return new Message(from, to, idStr, RREP_SIZE, RREP, requestId);
     }
 
     private void sendMessage(DTNHost destinationId, Message message) {
@@ -200,11 +201,18 @@ public class CustomRouter extends ActiveRouter {
     }
 
     private RoutingTableEntry findBestNode(List<RoutingTableEntry> routingTableEntries) {
-        //TODO
         return routingTableEntries
                 .stream()
-                .min(Comparator.comparing(RoutingTableEntry::getHopCount))
-                .orElse(routingTableEntries.get(0)); //hopefully can't get there
+                .min((o1, o2) -> {
+                    if (o1.getDistance() > o2.getDistance()) {
+                        return 1;
+                    } else if (o1.getDistance() < o2.getDistance()) {
+                        return -1;
+                    } else {
+                        return Double.compare(o1.getHopCount(), o2.getHopCount());
+                    }
+                })
+                .orElse(routingTableEntries.get(0));
     }
 
     @Override
@@ -229,7 +237,6 @@ public class CustomRouter extends ActiveRouter {
             DTNHost routeRequester = m.getFrom();
             if (destinationId.equals(this.getHost()) && !haveGeneratedRREPToThisRREQ(m.getId())) {
                 Message rrep = buildRouteReply(this.getHost(), routeRequester);
-                //this.sendMessage(routeRequester, rrep);
                 this.addToMessages(rrep, false);
             }
         }
@@ -241,9 +248,10 @@ public class CustomRouter extends ActiveRouter {
         }
         return super.receiveMessage(m, from);
     }
+
     boolean haveGeneratedRREPToThisRREQ(String rreqId) {
         if (this.handledRREQMemory.stream().anyMatch(mId -> mId.equals(rreqId))) {
-                return true;
+            return true;
         }
         this.handledRREQMemory.add(rreqId);
         return false;
@@ -258,26 +266,37 @@ public class CustomRouter extends ActiveRouter {
         int hopCount = listOfDTNHost.size(); //
         DTNHost nextHop = listOfDTNHost.get(hopCount - 1); // -1 because casting count to index
         // look for the entry to update
-        List<RoutingTableEntry> entryToUpdate = routingTable
+        Optional<RoutingTableEntry> entryToUpdate = routingTable
                 .stream()
                 .filter(entry -> entry.getDestinationId().equals(destinationId) &&
                         entry.getNextHop().equals(nextHop))
-                .collect(Collectors.toList());
-        if (entryToUpdate.isEmpty()) {
-            //add the entry
-            RoutingTableEntry routingTableEntry = new RoutingTableEntry();
-            routingTableEntry.setDestinationId(destinationId);
-            routingTableEntry.setNextHop(nextHop);
-            routingTableEntry.setHopCount(hopCount);
-            routingTable.add(routingTableEntry);
-            return;
+                .findFirst();
+        if (entryToUpdate.isPresent()) {
+            entryToUpdate.get().updateHopCount(hopCount);
+            entryToUpdate.get().setDistance(this.calculateDistanceFromMessage(message));
         }
-        if (!(entryToUpdate.size() == 1)) {
-            //Error, we shouldn't get there!
-            throw new RuntimeException();
+        //add the entry
+        RoutingTableEntry routingTableEntry = new RoutingTableEntry();
+        routingTableEntry.setDestinationId(destinationId);
+        routingTableEntry.setNextHop(nextHop);
+        routingTableEntry.setHopCount(hopCount);
+        routingTableEntry.setDistance(this.calculateDistanceFromMessage(message));
+        routingTable.add(routingTableEntry);
+    }
+
+    private double calculateDistanceFromMessage(Message message) {
+        if (message.getPreviousNodeLocation().equals(getHost().getLocation())) {
+            return 0.0;
         }
-        //entryTo.get(0).updateHopCount(message);
-        entryToUpdate.get(0).updateHopCount(hopCount);
+        double previousNodeX = message.getPreviousNodeLocation().getX();
+        double previousNodeY = message.getPreviousNodeLocation().getY();
+        double thisNodeX = getHost().getLocation().getX();
+        double thisNodeY = getHost().getLocation().getY();
+        double diffX = Math.abs(thisNodeX - previousNodeX);
+        double diffY = Math.abs(thisNodeY - previousNodeY);
+        double meanDistance = Math.sqrt(Math.pow(diffX, 2) + Math.pow(diffY, 2));
+        double previousMeanDistance = message.getDistanceTravelled();
+        return previousMeanDistance + meanDistance;
     }
 
     @Override

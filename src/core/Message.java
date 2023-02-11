@@ -67,6 +67,9 @@ public class Message implements Comparable<Message> {
 	 * requestId = -1 means that this is not a RREQ packet
 	 */
 	private int requestId;
+	private Coord previousNodeLocation;
+	private double distanceTravelled = 0.0;
+
 	static {
 		reset();
 		DTNSim.registerForReset(Message.class.getCanonicalName());
@@ -110,6 +113,22 @@ public class Message implements Comparable<Message> {
 
 	public int getType() {
 		return this.type;
+	}
+
+	public Coord getPreviousNodeLocation() {
+		return previousNodeLocation;
+	}
+
+	public void setPreviousNodeLocation(Coord previousNodeLocation) {
+		this.previousNodeLocation = previousNodeLocation;
+	}
+
+	public double getDistanceTravelled() {
+		return distanceTravelled;
+	}
+
+	public void setDistanceTravelled(double distanceTravelled) {
+		this.distanceTravelled = distanceTravelled;
 	}
 
 	/**
@@ -158,6 +177,7 @@ public class Message implements Comparable<Message> {
 	 * @param node The node to add
 	 */
 	public void addNodeOnPath(DTNHost node) {
+		this.previousNodeLocation = node.getLocation();
 		this.path.add(node);
 		if (this.isIndirectRREP) {
 			this.indirectRREPHopCount += 1;
