@@ -54,6 +54,7 @@ public class CustomRouter extends ActiveRouter {
     @Override
     public void update() {
         super.update();
+        clearMessagesToDelete();
         if (isTransferring() || !canStartTransfer()) {
             return; // transferring, don't try other connections yet
         }
@@ -68,7 +69,7 @@ public class CustomRouter extends ActiveRouter {
 //                    DTNHost destinationId = m.getTo();
 //                    DTNHost routeRequester = m.getFrom();
                     saveToRoutingTable(m);
-//                    if (routingTable.stream().anyMatch(routingTableEntry -> routingTableEntry.getDestinationId().equals(destinationId))) {
+//                  if (routingTable.stream().anyMatch(routingTableEntry -> routingTableEntry.getDestinationId().equals(destinationId))) {
 //                        //1) I know the route to the destination, I can generate the RREP!
 //                        List<RoutingTableEntry> routingTableEntries = routingTable
 //                                .stream()
@@ -106,12 +107,20 @@ public class CustomRouter extends ActiveRouter {
             }
         }
     }
+    public void addMessageIdToDelete (String id) {
+        if (this.getMessageCollection().stream().toList().contains(this.getMessage(id))) {
+            this.messagesToDelete.add(id);
+        }
+    }
+    private void clearMessagesToDelete() {
+        this.messagesToDelete.forEach(id -> deleteMessage(id, false));
+        this.messagesToDelete.clear();
+    }
+    private Set<String> messagesToDelete = new HashSet<>();
     @Override
     public Message messageTransferred(String id, DTNHost from) {
-        if (!id.startsWith("RREQ")) {
-            // the message was passed further - from host can delete it from its buffer
-            from.deleteMessage(id, false);
-        }
+        CustomRouter fromRouter = (CustomRouter)from.getRouter();
+        fromRouter.addMessageIdToDelete(id);
         return super.messageTransferred(id, from);
     }
     private boolean skipMessage(Message m) {
@@ -131,7 +140,7 @@ public class CustomRouter extends ActiveRouter {
          */
         DTNHost from = this.getHost();
         Message routeReq = this.buildRouteRequest(from, destination);
-        this.addToMessages(routeReq, true);
+        this.addToMessages(routeReq, false);
         //this.addToMessages(routeReq,true);
         this.broadcast(routeReq);
     }
@@ -140,7 +149,7 @@ public class CustomRouter extends ActiveRouter {
      * This is to avoid generating new RREQs every each update call
      * (introduces a delay between new RREQs)
      */
-    private static final double howOftenRetryRREQ = 800.0;
+    private static final double howOftenRetryRREQ = 300.0;
     private HashMap<String, Double> RREQMemory;
 
     private boolean canRetryRREQ(String destination) {
@@ -250,7 +259,7 @@ public class CustomRouter extends ActiveRouter {
             if (destinationId.equals(this.getHost()) && !haveGeneratedRREPToThisRREQ(m.getId())) {
                 Message rrep = buildRouteReply(this.getHost(), routeRequester);
                 //this.sendMessage(routeRequester, rrep);
-                this.addToMessages(rrep, true);
+                this.addToMessages(rrep, false);
             }
         }
         if (m.getType() == RREP) {
