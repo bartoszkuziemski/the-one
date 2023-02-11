@@ -274,6 +274,7 @@ public class CustomRouter extends ActiveRouter {
         if (entryToUpdate.isPresent()) {
             entryToUpdate.get().updateHopCount(hopCount);
             entryToUpdate.get().setDistance(this.calculateDistanceFromMessage(message));
+            return;
         }
         //add the entry
         RoutingTableEntry routingTableEntry = new RoutingTableEntry();
