@@ -14,26 +14,18 @@ import static core.Message.*;
 import static core.SimClock.getTime;
 
 public class CustomRouter extends ActiveRouter {
-    //sequenceNumber used for RREQ and RREP packets
     private int routeRequestId;
     private int routeReplyId;
-    private int getRouteRequestId() {
-        int id = this.routeRequestId;
-        this.routeRequestId += 1;
-        return id;
-    }
-    private int getRouteReplyId() {
-        int id = this.routeReplyId;
-        this.routeReplyId += 1;
-        return id;
-    }
+
     private final List<RoutingTableEntry> routingTable = new ArrayList<>();
     private final int processedRequestsBufferSize = 64;
 
-    //circular buffer to store the last 64 RREQs id (to avoid re-broadcasting)
-    private final CircularFifoQueue<String> processedRequests = new CircularFifoQueue(processedRequestsBufferSize);
     //circular buffer to remember the RREQs that the current node has answered to (avoid generating new unnecessary RREPs)
     private final CircularFifoQueue<String> handledRREQMemory = new CircularFifoQueue(processedRequestsBufferSize);
+    private Set<String> messagesToDelete = new HashSet<>();
+    private static final double howOftenRetryRREQ = 300.0;
+    private HashMap<String, Double> RREQMemory;
+
 
     public CustomRouter(ActiveRouter r) {
         super(r);
@@ -51,6 +43,17 @@ public class CustomRouter extends ActiveRouter {
         this.RREQMemory = new HashMap<String, Double>();
     }
 
+    private int getRouteRequestId() {
+        int id = this.routeRequestId;
+        this.routeRequestId += 1;
+        return id;
+    }
+    private int getRouteReplyId() {
+        int id = this.routeReplyId;
+        this.routeReplyId += 1;
+        return id;
+    }
+
     @Override
     public void update() {
         super.update();
@@ -65,21 +68,7 @@ public class CustomRouter extends ActiveRouter {
             }
             switch (m.getType()) {
                 case RREQ: {
-                    //update routing table:
-//                    DTNHost destinationId = m.getTo();
-//                    DTNHost routeRequester = m.getFrom();
                     saveToRoutingTable(m);
-//                  if (routingTable.stream().anyMatch(routingTableEntry -> routingTableEntry.getDestinationId().equals(destinationId))) {
-//                        //1) I know the route to the destination, I can generate the RREP!
-//                        List<RoutingTableEntry> routingTableEntries = routingTable
-//                                .stream()
-//                                .filter(entry -> entry.getDestinationId().equals(destinationId))
-//                                .collect(Collectors.toList());
-//                        RoutingTableEntry bestNode = findBestNode(routingTableEntries);
-//                        Message rrep = buildIndirectRouteReply(m, bestNode);
-//                        this.sendMessage(routeRequester, rrep);
-//                    } else {
-// 2) Broadcast the RREQ//                    }
                     this.broadcast(m);
                     break;
                 }
@@ -116,7 +105,6 @@ public class CustomRouter extends ActiveRouter {
         this.messagesToDelete.forEach(id -> deleteMessage(id, false));
         this.messagesToDelete.clear();
     }
-    private Set<String> messagesToDelete = new HashSet<>();
     @Override
     public Message messageTransferred(String id, DTNHost from) {
         CustomRouter fromRouter = (CustomRouter)from.getRouter();
@@ -136,8 +124,7 @@ public class CustomRouter extends ActiveRouter {
         if (!this.canRetryRREQ(destination.toString())) {
             return;
         }
-        /** Send a new RREQ if enough time passed
-         */
+        // Send a new RREQ if enough time passed
         DTNHost from = this.getHost();
         Message routeReq = this.buildRouteRequest(from, destination);
         this.addToMessages(routeReq, false);
@@ -148,15 +135,12 @@ public class CustomRouter extends ActiveRouter {
     /**
      * This is to avoid generating new RREQs every each update call
      * (introduces a delay between new RREQs)
+     *  Checks how long ago was the last time of
+     *  the RREQ to the selected destination send
+     *  returns true if it was 'enough' long time ago
      */
-    private static final double howOftenRetryRREQ = 300.0;
-    private HashMap<String, Double> RREQMemory;
-
     private boolean canRetryRREQ(String destination) {
-        /** Checks how long ago was the last time of
-         *  the RREQ to the selected destination send
-         *  returns true if it was 'enough' long time ago
-         */
+
         Double curTime = Double.valueOf(getTime());
         Double mapVal = RREQMemory.get(destination);
         if (mapVal != null) {
@@ -187,18 +171,6 @@ public class CustomRouter extends ActiveRouter {
             idStr += "_gen_by_" + this.getHost(); //when the author of the RREP is not the node at the end of the route...
         }
         Message rrep = new Message(from, to, idStr, RREP_SIZE, RREP, requestId);
-        return rrep;
-    }
-
-    /**
-     * This function is used to build a RREP in the node that is not the end-route node
-     * but knows the route to the requested node (based on the RoutingTableEntry entry object)
-     * and Message rreq
-     */
-    Message buildIndirectRouteReply(Message rreq, RoutingTableEntry entry) {
-        Message rrep = buildRouteReply(entry.getDestinationId(), rreq.getFrom());
-        double hopCount_double = entry.getHopCount();
-        rrep.setIndirectRREPHopCount((int) hopCount_double);
         return rrep;
     }
 
@@ -247,7 +219,6 @@ public class CustomRouter extends ActiveRouter {
                 .collect(Collectors.toList());
         routingTable.removeAll(entriesToRemove);
     }
-
 
     @Override
     public int receiveMessage(Message m, DTNHost from) {
@@ -308,7 +279,6 @@ public class CustomRouter extends ActiveRouter {
         //entryTo.get(0).updateHopCount(message);
         entryToUpdate.get(0).updateHopCount(hopCount);
     }
-
 
     @Override
     public MessageRouter replicate() {
