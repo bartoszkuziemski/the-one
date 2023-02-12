@@ -272,7 +272,7 @@ public class CustomRouter extends ActiveRouter {
                         entry.getNextHop().equals(nextHop))
                 .findFirst();
         if (entryToUpdate.isPresent()) {
-            entryToUpdate.get().updateHopCount(hopCount);
+            entryToUpdate.get().setHopCount(hopCount);
             entryToUpdate.get().setDistance(this.calculateDistanceFromMessage(message));
             return;
         }
